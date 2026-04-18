@@ -21,8 +21,9 @@
 |------|------|
 | `COZE_BOT_ID` | Coze 後台該 Bot 的 ID（發布為 API 後可見） |
 | `COZE_API_KEY` | Coze Personal Access Token（API 授權裡建立） |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL（Demo 訂單/售後 API 使用） |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key（僅 server 端使用） |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase Project URL（登入、訂單、Middleware、Demo API 共用） |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Publishable** API key（Dashboard → **Project Settings → API Keys** → Publishable；常見格式 `sb_publishable_...`）。與舊版 **Legacy API Keys** 裡的 JWT **anon** key 權限相同，過渡期可擇一貼入此變數（變數名沿用社群慣例 `..._ANON_KEY`）。說明見 [Supabase：Understanding API keys](https://supabase.com/docs/guides/api/api-keys)。 |
+| `SUPABASE_SERVICE_ROLE_KEY` | 高權限後端 key：建議使用 **Secret** key（`sb_secret_...`）；舊專案仍可貼 Legacy 的 JWT **service_role** key。僅供 `getSupabaseAdminClient()`（`/api/demo/*`），**絕不可**暴露到瀏覽器或 `NEXT_PUBLIC_` 前綴。 |
 | `AGENT_API_KEY` | Agent 呼叫 `/api/demo/*` 時的 `X-API-Key` |
 
 中國區 Coze 若需使用 `api.coze.cn`，可在 `src/app/api/coze/chat/route.ts` 中將 `COZE_API_BASE` 改為從環境變量讀取並設為 `https://api.coze.cn`。
@@ -133,3 +134,7 @@ curl -X POST 'https://api.coze.com/v3/chat' \
 
 - 在 Supabase SQL Editor 執行：`supabase/demo-schema.sql`
 - 該檔會建立 `purchase_orders`、`service_requests` 兩張表，並插入 `demo-user-a/b` 測試訂單資料。
+
+### API Key 命名（Supabase 平台）
+
+Supabase 已將儀表板中的低權限 key 統稱為 **Publishable**，高權限後端 key 統稱為 **Secret**；舊的 JWT **anon** / **service_role** 則標為 **legacy**，過渡期內兩套 key 可擇一使用，並可逐步遷移。本專案程式仍使用 `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` 這兩個環境變數名稱，與 `@supabase/ssr` 及既有程式相容；請將 **Publishable**（或 legacy anon）貼入前者，**Secret**（或 legacy service_role）貼入後者。

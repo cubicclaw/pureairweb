@@ -16,7 +16,7 @@ interface OrderData {
 function NewOrderForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const productId = searchParams.get("product") || "";
+  const productId = searchParams?.get("product") ?? "";
 
   const [selectedProductId, setSelectedProductId] = useState(productId);
   const [loading, setLoading] = useState(false);
