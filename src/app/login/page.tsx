@@ -6,6 +6,7 @@ import Link from "next/link";
 import { captchaConfig, CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
 import { BASE_PATH } from "@/lib/base-path";
 import { MathCaptcha } from "@/components/captcha/math-captcha";
+import { SliderCaptcha } from "@/components/captcha/slider-captcha";
 
 function LoginForm() {
   const router = useRouter();
@@ -111,7 +112,11 @@ function LoginForm() {
                 請完成以下驗證以繼續操作
               </p>
             </div>
-            <MathCaptcha onVerified={handleVerified} />
+            {captchaConfig.mode === "slider" ? (
+              <SliderCaptcha onVerified={handleVerified} />
+            ) : (
+              <MathCaptcha onVerified={handleVerified} />
+            )}
             <button
               type="button"
               onClick={handleCancel}

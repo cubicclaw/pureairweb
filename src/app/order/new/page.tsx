@@ -6,6 +6,7 @@ import Link from "next/link";
 import { products } from "@/data/products";
 import { BASE_PATH } from "@/lib/base-path";
 import { captchaConfig, CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
+import { MathCaptcha } from "@/components/captcha/math-captcha";
 import { SliderCaptcha } from "@/components/captcha/slider-captcha";
 
 interface OrderData {
@@ -172,7 +173,11 @@ function NewOrderForm() {
                 請完成以下驗證以繼續操作
               </p>
             </div>
-            <SliderCaptcha onVerified={handleVerified} />
+            {captchaConfig.mode === "slider" ? (
+              <SliderCaptcha onVerified={handleVerified} />
+            ) : (
+              <MathCaptcha onVerified={handleVerified} />
+            )}
             <button
               type="button"
               onClick={handleCancel}
