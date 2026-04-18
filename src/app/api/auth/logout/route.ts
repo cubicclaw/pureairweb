@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function POST() {
   try {
     const supabase = await createServerSupabaseClient();
