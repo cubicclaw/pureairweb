@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
+import { BASE_PATH } from "@/lib/base-path";
 
 interface Message {
   id: string;
@@ -61,7 +62,7 @@ export function ChatPanel() {
     setError(null);
 
     try {
-      const res = await fetch("/api/coze/chat", {
+      const res = await fetch(`${BASE_PATH}/api/coze/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

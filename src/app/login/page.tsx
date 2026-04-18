@@ -4,7 +4,8 @@ import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { captchaConfig, CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
-import CaptchaModal from "@/components/captcha-modal";
+import { BASE_PATH } from "@/lib/base-path";
+import { MathCaptcha } from "@/components/captcha/math-captcha";
 
 function LoginForm() {
   const router = useRouter();
@@ -60,7 +61,7 @@ function LoginForm() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${BASE_PATH}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -96,12 +97,31 @@ function LoginForm() {
 
   return (
     <>
-      <CaptchaModal
-        isOpen={showCaptcha}
-        onVerified={handleVerified}
-        onCancel={handleCancel}
-        mode={captchaConfig.mode}
-      />
+      {showCaptcha && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-xl dark:bg-amber-900/30">
+                🛡️
+              </div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                安全驗證
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                請完成以下驗證以繼續操作
+              </p>
+            </div>
+            <MathCaptcha onVerified={handleVerified} />
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="mt-4 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="mx-auto max-w-md px-4 py-16">
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
