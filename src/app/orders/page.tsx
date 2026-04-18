@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { BASE_PATH } from "@/lib/base-path";
 
 interface Order {
   id: string;
@@ -40,7 +41,7 @@ export default function OrdersPage() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/orders")
+    fetch(`${BASE_PATH}/api/orders`)
       .then((r) => {
         if (r.status === 401) {
           router.push("/login?redirect=/orders");

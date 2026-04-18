@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
+import { BASE_PATH } from "@/lib/base-path";
 
 interface MeData {
   user: { id: string; email: string } | null;
@@ -15,13 +16,13 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch(`${BASE_PATH}/api/auth/me`)
       .then((r) => r.json())
       .then((data: MeData) => setUserEmail(data.user?.email ?? null));
   }, [pathname]);
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch(`${BASE_PATH}/api/auth/logout`, { method: "POST" });
     setUserEmail(null);
     router.push("/");
     router.refresh();

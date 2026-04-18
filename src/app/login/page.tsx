@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { captchaConfig, CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
+import { BASE_PATH } from "@/lib/base-path";
+import { MathCaptcha } from "@/components/captcha/math-captcha";
 
 function LoginForm() {
   const router = useRouter();
@@ -14,13 +17,51 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  // Captcha state
+  const [showCaptcha, setShowCaptcha] = useState(false);
+  const [captchaOverride, setCaptchaOverride] = useState<boolean | null>(null);
+
+  // Read ?captcha= URL param for demo toggle
+  useEffect(() => {
+    const param = searchParams?.get("captcha");
+    if (param === "1") setCaptchaOverride(true);
+    else if (param === "0") setCaptchaOverride(false);
+    else setCaptchaOverride(null);
+  }, [searchParams]);
+
+  const isCaptchaActive = (() => {
+    if (captchaOverride !== null) return captchaOverride;
+    if (!captchaConfig.enabled) return false;
+    if (typeof window !== "undefined") {
+      const verified = document.cookie.match(new RegExp(`(^| )${CAPTCHA_COOKIE}=([^;]+)`));
+      const timestamp = document.cookie.match(new RegExp(`(^| )${CAPTCHA_TIMESTAMP_COOKIE}=([^;]+)`));
+      if (verified && timestamp) {
+        const mins = (Date.now() - parseInt(timestamp[2], 10)) / 60000;
+        if (mins < captchaConfig.cooldownMinutes) return false;
+      }
+    }
+    return Math.random() < captchaConfig.triggerRate;
+  })();
+
+  function handleVerified() {
+    if (typeof window !== "undefined") {
+      document.cookie = `${CAPTCHA_COOKIE}=1; path=/; max-age=${captchaConfig.cooldownMinutes * 60}`;
+      document.cookie = `${CAPTCHA_TIMESTAMP_COOKIE}=${Date.now()}; path=/; max-age=${captchaConfig.cooldownMinutes * 60}`;
+    }
+    setShowCaptcha(false);
+    submitLogin();
+  }
+
+  function handleCancel() {
+    setShowCaptcha(false);
+    setLoading(false);
+  }
+
+  async function submitLogin() {
     setError("");
     setLoading(true);
-
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(`${BASE_PATH}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -42,73 +83,128 @@ function LoginForm() {
     }
   }
 
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+
+    if (isCaptchaActive) {
+      setShowCaptcha(true);
+    } else {
+      await submitLogin();
+    }
+  }
+
   return (
-    <div className="mx-auto max-w-md px-4 py-16">
-      <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <h1 className="mb-2 text-2xl font-bold text-slate-900 dark:text-white">
-          登入
-        </h1>
-        <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
-          使用您的電子郵件和密碼登入
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+    <>
+      {showCaptcha && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+            <div className="mb-6 text-center">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-xl dark:bg-amber-900/30">
+                🛡️
+              </div>
+              <h2 className="text-lg font-bold text-slate-900 dark:text-white">
+                安全驗證
+              </h2>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                請完成以下驗證以繼續操作
+              </p>
+            </div>
+            <MathCaptcha onVerified={handleVerified} />
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="mt-4 w-full rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
             >
-              電子郵件
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder-slate-400 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-400"
-            />
+              取消
+            </button>
           </div>
+        </div>
+      )}
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+      <div className="mx-auto max-w-md px-4 py-16">
+        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="mb-1 flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+              登入
+            </h1>
+            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+              style={{
+                background: isCaptchaActive ? "rgba(234,179,8,0.15)" : "rgba(34,197,94,0.15)",
+                color: isCaptchaActive ? "#ca8a04" : "#16a34a",
+              }}
             >
-              密碼
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder-slate-400 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-400"
-            />
+              {isCaptchaActive ? "🔐 驗證開啟" : "✅ 驗證關閉"}
+            </span>
           </div>
+          <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
+            使用您的電子郵件和密碼登入
+          </p>
 
-          {error && (
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
-          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                電子郵件
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder-slate-400 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-400"
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
-          >
-            {loading ? "登入中..." : "登入"}
-          </button>
-        </form>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+              >
+                密碼
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder-slate-400 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-slate-600 dark:bg-slate-700 dark:text-white dark:placeholder-slate-400"
+              />
+            </div>
 
-        <p className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
-          <Link href="/" className="text-sky-600 hover:underline dark:text-sky-400">
-            ← 返回首頁
-          </Link>
-        </p>
+            {error && (
+              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
+            >
+              {loading ? "登入中..." : "登入"}
+            </button>
+          </form>
+
+          <p className="mt-4 text-center text-sm text-slate-500 dark:text-slate-400">
+            <Link href="/" className="text-sky-600 hover:underline dark:text-sky-400">
+              ← 返回首頁
+            </Link>
+          </p>
+
+          {/* Demo usage hint */}
+          <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-700/30 dark:text-slate-400">
+            💡 Demo 開關：?captcha=1 開啟驗證 · ?captcha=0 關閉驗證
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
