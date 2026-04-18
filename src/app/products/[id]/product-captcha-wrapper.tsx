@@ -2,6 +2,8 @@
 
 import { CaptchaGate } from "@/components/captcha/captcha-gate";
 import { MathCaptcha } from "@/components/captcha/math-captcha";
+import { SliderCaptcha } from "@/components/captcha/slider-captcha";
+import { captchaConfig } from "@/data/captcha-config";
 
 interface ProductCaptchaWrapperProps {
   children: React.ReactNode;
@@ -20,7 +22,11 @@ export function ProductCaptchaWrapper({
                 <h2 className="mb-4 text-center text-lg font-semibold text-slate-900 dark:text-white">
                   請完成驗證
                 </h2>
-                <MathCaptcha onVerified={onVerified} />
+                {captchaConfig.mode === "slider" ? (
+                  <SliderCaptcha onVerified={onVerified} />
+                ) : (
+                  <MathCaptcha onVerified={onVerified} />
+                )}
               </div>
             </div>
           )}

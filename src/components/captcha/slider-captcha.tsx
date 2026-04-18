@@ -31,15 +31,17 @@ export function SliderCaptcha({
     <div className="w-full max-w-sm">
       <SliderCaptchaComponent
         // @ts-ignore
+        root={null}
+        // @ts-ignore
         width={width}
         // @ts-ignore
         height={height}
         // @ts-ignore
         theme={theme}
         // @ts-ignore
-        onVerified={onVerified}
+        onSuccess={onVerified}
         // @ts-ignore
-        onError={onError}
+        onFail={onError}
       />
     </div>
   );
