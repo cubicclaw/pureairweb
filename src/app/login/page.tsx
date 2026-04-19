@@ -1,28 +1,38 @@
 "use client";
 
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { captchaConfig, CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
+import { CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
 import { BASE_PATH } from "@/lib/base-path";
 import { MathCaptcha } from "@/components/captcha/math-captcha";
 import { SliderCaptcha } from "@/components/captcha/slider-captcha";
+import { useCaptchaRuntimeConfig } from "@/hooks/use-captcha-runtime-config";
+
+function isWithinCaptchaCooldown(cooldownMinutes: number): boolean {
+  if (typeof window === "undefined") return false;
+  const verified = document.cookie.match(new RegExp(`(^| )${CAPTCHA_COOKIE}=([^;]+)`));
+  const timestamp = document.cookie.match(new RegExp(`(^| )${CAPTCHA_TIMESTAMP_COOKIE}=([^;]+)`));
+  if (!verified || !timestamp) return false;
+  const mins = (Date.now() - parseInt(timestamp[2], 10)) / 60000;
+  return mins < cooldownMinutes;
+}
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams?.get("redirect") ?? "/";
 
+  const { config, loading: configLoading } = useCaptchaRuntimeConfig();
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Captcha state
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaOverride, setCaptchaOverride] = useState<boolean | null>(null);
 
-  // Read ?captcha= URL param for demo toggle
   useEffect(() => {
     const param = searchParams?.get("captcha");
     if (param === "1") setCaptchaOverride(true);
@@ -30,27 +40,26 @@ function LoginForm() {
     else setCaptchaOverride(null);
   }, [searchParams]);
 
-  const isCaptchaActive = (() => {
-    if (captchaOverride !== null) return captchaOverride;
-    if (!captchaConfig.enabled) return false;
-    if (typeof window !== "undefined") {
-      const verified = document.cookie.match(new RegExp(`(^| )${CAPTCHA_COOKIE}=([^;]+)`));
-      const timestamp = document.cookie.match(new RegExp(`(^| )${CAPTCHA_TIMESTAMP_COOKIE}=([^;]+)`));
-      if (verified && timestamp) {
-        const mins = (Date.now() - parseInt(timestamp[2], 10)) / 60000;
-        if (mins < captchaConfig.cooldownMinutes) return false;
-      }
-    }
-    return Math.random() < captchaConfig.triggerRate;
-  })();
+  const badgeHint = useMemo(() => {
+    if (configLoading) return { label: "設定載入中…", amber: false };
+    if (captchaOverride === true) return { label: "🔐 URL 強制驗證", amber: true };
+    if (captchaOverride === false) return { label: "✅ URL 關閉驗證", amber: false };
+    if (!config.enabled) return { label: "✅ 系統已關閉", amber: false };
+    if (!config.loginCaptcha) return { label: "✅ 登入未啟用", amber: false };
+    if (isWithinCaptchaCooldown(config.cooldownMinutes)) return { label: "✅ 冷卻中", amber: false };
+    if (config.randomTriggerRate <= 0) return { label: "✅ 機率為 0", amber: false };
+    if (config.randomTriggerRate >= 1) return { label: "🔐 將要求驗證", amber: true };
+    return { label: "🔐 依機率可能驗證", amber: true };
+  }, [config, configLoading, captchaOverride]);
 
   function handleVerified() {
     if (typeof window !== "undefined") {
-      document.cookie = `${CAPTCHA_COOKIE}=1; path=/; max-age=${captchaConfig.cooldownMinutes * 60}`;
-      document.cookie = `${CAPTCHA_TIMESTAMP_COOKIE}=${Date.now()}; path=/; max-age=${captchaConfig.cooldownMinutes * 60}`;
+      const maxAge = config.cooldownMinutes * 60;
+      document.cookie = `${CAPTCHA_COOKIE}=1; path=/; max-age=${maxAge}`;
+      document.cookie = `${CAPTCHA_TIMESTAMP_COOKIE}=${Date.now()}; path=/; max-age=${maxAge}`;
     }
     setShowCaptcha(false);
-    submitLogin();
+    void submitLogin();
   }
 
   function handleCancel() {
@@ -86,14 +95,28 @@ function LoginForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (configLoading) {
+      setError("驗證設定載入中，請稍候再試");
+      return;
+    }
     setLoading(true);
     setError("");
 
-    if (isCaptchaActive) {
+    const shouldShow =
+      captchaOverride !== null
+        ? captchaOverride
+        : !config.enabled || !config.loginCaptcha
+          ? false
+          : isWithinCaptchaCooldown(config.cooldownMinutes)
+            ? false
+            : Math.random() < config.randomTriggerRate;
+
+    if (shouldShow) {
       setShowCaptcha(true);
-    } else {
-      await submitLogin();
+      setLoading(false);
+      return;
     }
+    await submitLogin();
   }
 
   return (
@@ -112,7 +135,7 @@ function LoginForm() {
                 請完成以下驗證以繼續操作
               </p>
             </div>
-            {captchaConfig.mode === "slider" ? (
+            {config.mode === "slider" ? (
               <SliderCaptcha onVerified={handleVerified} />
             ) : (
               <MathCaptcha onVerified={handleVerified} />
@@ -134,20 +157,21 @@ function LoginForm() {
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
               登入
             </h1>
-            <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+            <span
+              className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
               style={{
-                background: isCaptchaActive ? "rgba(234,179,8,0.15)" : "rgba(34,197,94,0.15)",
-                color: isCaptchaActive ? "#ca8a04" : "#16a34a",
+                background: badgeHint.amber ? "rgba(234,179,8,0.15)" : "rgba(34,197,94,0.15)",
+                color: badgeHint.amber ? "#ca8a04" : "#16a34a",
               }}
             >
-              {isCaptchaActive ? "🔐 驗證開啟" : "✅ 驗證關閉"}
+              {badgeHint.label}
             </span>
           </div>
           <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
             使用您的電子郵件和密碼登入
           </p>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
             <div>
               <label
                 htmlFor="email"
@@ -190,10 +214,10 @@ function LoginForm() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || configLoading}
               className="w-full rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
             >
-              {loading ? "登入中..." : "登入"}
+              {configLoading ? "載入設定…" : loading ? "登入中..." : "登入"}
             </button>
           </form>
 
@@ -203,9 +227,11 @@ function LoginForm() {
             </Link>
           </p>
 
-          {/* Demo usage hint */}
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-700/30 dark:text-slate-400">
-            💡 Demo 開關：?captcha=1 開啟驗證 · ?captcha=0 關閉驗證
+            💡 Demo 開關：?captcha=1 開啟驗證 · ?captcha=0 關閉驗證 · 機率與題型由{" "}
+            <Link href="/admin/captcha" className="text-sky-600 hover:underline dark:text-sky-400">
+              管理後台
+            </Link>
           </div>
         </div>
       </div>
@@ -215,13 +241,15 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <div className="mx-auto max-w-md px-4 py-16">
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <p className="text-center text-slate-500">載入中...</p>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-md px-4 py-16">
+          <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <p className="text-center text-slate-500">載入中...</p>
+          </div>
         </div>
-      </div>
-    }>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

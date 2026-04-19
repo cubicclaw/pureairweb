@@ -1,27 +1,29 @@
 /**
- * Captcha System Configuration
- * 
- * Toggle: Add ?captcha=1 to URL to force captcha, ?captcha=0 to disable
- * Without param: Uses captchaEnabled below as master switch
- * 
- * Demo scenarios:
- * - Login page: reCAPTCHA v3 (silent, based on score)
- * - Order submission: Random slider captcha (30% chance by default)
+ * Cookie names + client fallback when `/api/captcha/public-config` is unavailable.
+ * Authoritative settings are stored server-side (`/tmp/captcha-config.json`) and
+ * edited via `/admin/captcha`.
  */
 
-export interface CaptchaConfig {
-  enabled: boolean;        // Master switch: true = captcha system active
-  triggerRate: number;    // 0.0 - 1.0, probability of triggering per action
-  mode: 'math' | 'slider'; // Captcha type
-  cooldownMinutes: number; // Minutes before same user is challenged again
+export type CaptchaMode = "math" | "slider";
+
+export interface CaptchaRuntimePublicConfig {
+  enabled: boolean;
+  loginCaptcha: boolean;
+  orderCaptcha: boolean;
+  randomTriggerRate: number;
+  cooldownMinutes: number;
+  mode: CaptchaMode;
 }
 
-export const captchaConfig: CaptchaConfig = {
+/** Must stay aligned with `DEFAULT_RUNTIME_CONFIG` in `src/lib/captcha-runtime-store.ts`. */
+export const CAPTCHA_PUBLIC_FALLBACK: CaptchaRuntimePublicConfig = {
   enabled: true,
-  triggerRate: 0.3,       // 30% chance to trigger on order submission
-  mode: 'math',
-  cooldownMinutes: 5,      // Don't re-challenge same browser for 5 min
+  loginCaptcha: true,
+  orderCaptcha: true,
+  randomTriggerRate: 0.3,
+  cooldownMinutes: 5,
+  mode: "math",
 };
 
-export const CAPTCHA_COOKIE = 'captcha_verified';
-export const CAPTCHA_TIMESTAMP_COOKIE = 'captcha_verified_at';
+export const CAPTCHA_COOKIE = "captcha_verified";
+export const CAPTCHA_TIMESTAMP_COOKIE = "captcha_verified_at";

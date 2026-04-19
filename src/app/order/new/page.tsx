@@ -1,13 +1,23 @@
 "use client";
 
-import { useState, Suspense, useEffect } from "react";
+import { useState, Suspense, useEffect, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { products } from "@/data/products";
 import { BASE_PATH } from "@/lib/base-path";
-import { captchaConfig, CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
+import { CAPTCHA_COOKIE, CAPTCHA_TIMESTAMP_COOKIE } from "@/data/captcha-config";
 import { MathCaptcha } from "@/components/captcha/math-captcha";
 import { SliderCaptcha } from "@/components/captcha/slider-captcha";
+import { useCaptchaRuntimeConfig } from "@/hooks/use-captcha-runtime-config";
+
+function isWithinCaptchaCooldown(cooldownMinutes: number): boolean {
+  if (typeof window === "undefined") return false;
+  const verified = document.cookie.match(new RegExp(`(^| )${CAPTCHA_COOKIE}=([^;]+)`));
+  const timestamp = document.cookie.match(new RegExp(`(^| )${CAPTCHA_TIMESTAMP_COOKIE}=([^;]+)`));
+  if (!verified || !timestamp) return false;
+  const mins = (Date.now() - parseInt(timestamp[2], 10)) / 60000;
+  return mins < cooldownMinutes;
+}
 
 interface OrderData {
   id: string;
@@ -22,16 +32,16 @@ function NewOrderForm() {
   const searchParams = useSearchParams();
   const productId = searchParams?.get("product") ?? "";
 
+  const { config, loading: configLoading } = useCaptchaRuntimeConfig();
+
   const [selectedProductId, setSelectedProductId] = useState(productId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [successOrder, setSuccessOrder] = useState<OrderData | null>(null);
 
-  // Captcha state
   const [showCaptcha, setShowCaptcha] = useState(false);
   const [captchaOverride, setCaptchaOverride] = useState<boolean | null>(null);
 
-  // Read ?captcha= URL param for demo toggle
   useEffect(() => {
     const param = searchParams?.get("captcha");
     if (param === "1") setCaptchaOverride(true);
@@ -39,34 +49,26 @@ function NewOrderForm() {
     else setCaptchaOverride(null);
   }, [searchParams]);
 
-  // Determine if captcha should be active
-  const isCaptchaActive = (() => {
-    if (captchaOverride !== null) return captchaOverride;
-    if (!captchaConfig.enabled) return false;
-
-    // Check cooldown cookie
-    if (typeof window !== "undefined") {
-      const verified = document.cookie.match(new RegExp(`(^| )${CAPTCHA_COOKIE}=([^;]+)`));
-      const timestamp = document.cookie.match(new RegExp(`(^| )${CAPTCHA_TIMESTAMP_COOKIE}=([^;]+)`));
-      if (verified && timestamp) {
-        const mins = (Date.now() - parseInt(timestamp[2], 10)) / 60000;
-        if (mins < captchaConfig.cooldownMinutes) return false;
-      }
-    }
-
-    // Random trigger
-    return Math.random() < captchaConfig.triggerRate;
-  })();
+  const badgeHint = useMemo(() => {
+    if (configLoading) return { label: "設定載入中…", amber: false };
+    if (captchaOverride === true) return { label: "🔐 URL 強制驗證", amber: true };
+    if (captchaOverride === false) return { label: "✅ URL 關閉驗證", amber: false };
+    if (!config.enabled) return { label: "✅ 系統已關閉", amber: false };
+    if (!config.orderCaptcha) return { label: "✅ 下單未啟用", amber: false };
+    if (isWithinCaptchaCooldown(config.cooldownMinutes)) return { label: "✅ 冷卻中", amber: false };
+    if (config.randomTriggerRate <= 0) return { label: "✅ 機率為 0", amber: false };
+    if (config.randomTriggerRate >= 1) return { label: "🔐 將要求驗證", amber: true };
+    return { label: "🔐 依機率可能驗證", amber: true };
+  }, [config, configLoading, captchaOverride]);
 
   function handleVerified() {
-    // Set cooldown cookie
     if (typeof window !== "undefined") {
-      document.cookie = `${CAPTCHA_COOKIE}=1; path=/; max-age=${captchaConfig.cooldownMinutes * 60}`;
-      document.cookie = `${CAPTCHA_TIMESTAMP_COOKIE}=${Date.now()}; path=/; max-age=${captchaConfig.cooldownMinutes * 60}`;
+      const maxAge = config.cooldownMinutes * 60;
+      document.cookie = `${CAPTCHA_COOKIE}=1; path=/; max-age=${maxAge}`;
+      document.cookie = `${CAPTCHA_TIMESTAMP_COOKIE}=${Date.now()}; path=/; max-age=${maxAge}`;
     }
     setShowCaptcha(false);
-    // Now submit the form
-    submitOrder();
+    void submitOrder();
   }
 
   function handleCancel() {
@@ -117,16 +119,29 @@ function NewOrderForm() {
       setError("請選擇產品");
       return;
     }
+    if (configLoading) {
+      setError("驗證設定載入中，請稍候再試");
+      return;
+    }
 
     setLoading(true);
     setError("");
 
-    // Trigger captcha if active
-    if (isCaptchaActive) {
+    const shouldShow =
+      captchaOverride !== null
+        ? captchaOverride
+        : !config.enabled || !config.orderCaptcha
+          ? false
+          : isWithinCaptchaCooldown(config.cooldownMinutes)
+            ? false
+            : Math.random() < config.randomTriggerRate;
+
+    if (shouldShow) {
       setShowCaptcha(true);
-    } else {
-      await submitOrder();
+      setLoading(false);
+      return;
     }
+    await submitOrder();
   }
 
   if (successOrder) {
@@ -173,7 +188,7 @@ function NewOrderForm() {
                 請完成以下驗證以繼續操作
               </p>
             </div>
-            {captchaConfig.mode === "slider" ? (
+            {config.mode === "slider" ? (
               <SliderCaptcha onVerified={handleVerified} />
             ) : (
               <MathCaptcha onVerified={handleVerified} />
@@ -190,23 +205,23 @@ function NewOrderForm() {
       )}
 
       <div className="mx-auto max-w-xl px-4 py-12">
-        {/* Demo toggle indicator */}
         <div className="mb-4 flex items-center gap-2">
           <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
             新增訂單
           </h1>
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
+          <span
+            className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium"
             style={{
-              background: isCaptchaActive ? "rgba(234,179,8,0.15)" : "rgba(34,197,94,0.15)",
-              color: isCaptchaActive ? "#ca8a04" : "#16a34a",
+              background: badgeHint.amber ? "rgba(234,179,8,0.15)" : "rgba(34,197,94,0.15)",
+              color: badgeHint.amber ? "#ca8a04" : "#16a34a",
             }}
           >
-            {isCaptchaActive ? "🔐 驗證開啟" : "✅ 驗證關閉"}
+            {badgeHint.label}
           </span>
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-6">
             <div>
               <label
                 htmlFor="product"
@@ -237,10 +252,10 @@ function NewOrderForm() {
             <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || configLoading}
                 className="flex-1 rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-700 disabled:opacity-50"
               >
-                {loading ? "提交中..." : "提交訂單"}
+                {configLoading ? "載入設定…" : loading ? "提交中..." : "提交訂單"}
               </button>
               <Link
                 href="/"
@@ -251,9 +266,11 @@ function NewOrderForm() {
             </div>
           </form>
 
-          {/* Demo usage hint */}
           <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-500 dark:bg-slate-700/30 dark:text-slate-400">
-            💡 Demo 開關：?captcha=1 開啟驗證 · ?captcha=0 關閉驗證
+            💡 Demo：?captcha=1 / ?captcha=0 · 機率與題型由{" "}
+            <Link href="/admin/captcha" className="text-sky-600 hover:underline dark:text-sky-400">
+              管理後台
+            </Link>
           </div>
         </div>
       </div>
@@ -263,11 +280,13 @@ function NewOrderForm() {
 
 export default function NewOrderPage() {
   return (
-    <Suspense fallback={
-      <div className="mx-auto max-w-xl px-4 py-12 text-center">
-        <p className="text-slate-500">載入中...</p>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="mx-auto max-w-xl px-4 py-12 text-center">
+          <p className="text-slate-500">載入中...</p>
+        </div>
+      }
+    >
       <NewOrderForm />
     </Suspense>
   );

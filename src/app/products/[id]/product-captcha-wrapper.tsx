@@ -3,7 +3,7 @@
 import { CaptchaGate } from "@/components/captcha/captcha-gate";
 import { MathCaptcha } from "@/components/captcha/math-captcha";
 import { SliderCaptcha } from "@/components/captcha/slider-captcha";
-import { captchaConfig } from "@/data/captcha-config";
+import { useCaptchaRuntimeConfig } from "@/hooks/use-captcha-runtime-config";
 
 interface ProductCaptchaWrapperProps {
   children: React.ReactNode;
@@ -12,8 +12,19 @@ interface ProductCaptchaWrapperProps {
 export function ProductCaptchaWrapper({
   children,
 }: ProductCaptchaWrapperProps) {
+  const { config, loading } = useCaptchaRuntimeConfig();
+
+  if (loading) {
+    return <>{children}</>;
+  }
+
   return (
-    <CaptchaGate probability={0.2}>
+    <CaptchaGate
+      key={`${config.enabled}-${config.randomTriggerRate}-${config.cooldownMinutes}`}
+      enabled={config.enabled}
+      probability={config.randomTriggerRate}
+      cooldownMinutes={config.cooldownMinutes}
+    >
       {({ showCaptcha, onVerified }) => (
         <>
           {showCaptcha && (
@@ -22,7 +33,7 @@ export function ProductCaptchaWrapper({
                 <h2 className="mb-4 text-center text-lg font-semibold text-slate-900 dark:text-white">
                   請完成驗證
                 </h2>
-                {captchaConfig.mode === "slider" ? (
+                {config.mode === "slider" ? (
                   <SliderCaptcha onVerified={onVerified} />
                 ) : (
                   <MathCaptcha onVerified={onVerified} />

@@ -11,6 +11,7 @@ interface CaptchaConfig {
   order_captcha: boolean;
   random_trigger_rate: number;
   cooldown_minutes: number;
+  captcha_mode: "math" | "slider";
 }
 
 function AdminCaptchaDashboard() {
@@ -85,7 +86,7 @@ function AdminCaptchaDashboard() {
     [apiUrl, token]
   );
 
-  function handleToggle(key: keyof CaptchaConfig) {
+  function handleToggle(key: "enabled" | "login_captcha" | "order_captcha") {
     if (!config) return;
     const updated = { ...config, [key]: !config[key] };
     setConfig(updated);
@@ -95,6 +96,13 @@ function AdminCaptchaDashboard() {
   function handleSlider(key: "random_trigger_rate" | "cooldown_minutes", value: number) {
     if (!config) return;
     const updated = { ...config, [key]: value };
+    setConfig(updated);
+    saveConfig(updated);
+  }
+
+  function handleModeChange(mode: "math" | "slider") {
+    if (!config) return;
+    const updated = { ...config, captcha_mode: mode };
     setConfig(updated);
     saveConfig(updated);
   }
@@ -227,7 +235,7 @@ function AdminCaptchaDashboard() {
           {/* Login captcha */}
           <ToggleCard
             title="登入驗證碼"
-            description="登入頁面 (/login) 提交前觸發數學驗證碼"
+            description="登入頁面 (/login) 提交前是否可能觸發驗證（題型見下方）"
             checked={config.login_captcha}
             onChange={() => handleToggle("login_captcha")}
             disabled={!config.enabled}
@@ -237,12 +245,40 @@ function AdminCaptchaDashboard() {
           {/* Order captcha */}
           <ToggleCard
             title="下單驗證碼"
-            description="下單頁面 (/order/new) 提交前觸發滑塊驗證碼"
+            description="下單頁面 (/order/new) 提交前是否可能觸發驗證（題型見下方）"
             checked={config.order_captcha}
             onChange={() => handleToggle("order_captcha")}
             disabled={!config.enabled}
             accent="amber"
           />
+
+          {/* Captcha mode */}
+          <div
+            className={`rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 ${
+              !config.enabled ? "opacity-50" : ""
+            }`}
+          >
+            <div className="mb-3 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white">驗證題型</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                  登入、下單、產品頁彈窗皆使用此題型（數學後端簽發；滑塊為啟發式後端）
+                </p>
+              </div>
+            </div>
+            <select
+              id="captcha-mode"
+              value={config.captcha_mode}
+              disabled={!config.enabled}
+              onChange={(e) =>
+                handleModeChange(e.target.value === "slider" ? "slider" : "math")
+              }
+              className="mt-1 block w-full max-w-xs rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 shadow-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 disabled:cursor-not-allowed dark:border-slate-600 dark:bg-slate-700 dark:text-white"
+            >
+              <option value="math">數學驗證 (Math)</option>
+              <option value="slider">滑塊驗證 (Slider)</option>
+            </select>
+          </div>
 
           {/* Random trigger rate */}
           <SliderCard
