@@ -95,13 +95,50 @@ export async function readCaptchaRuntimeConfig(): Promise<CaptchaRuntimeFileConf
   }
 }
 
-function normalizeRuntimeConfig(
-  parsed: Partial<CaptchaRuntimeFileConfig>,
-): CaptchaRuntimeFileConfig {
-  const merged = { ...DEFAULT_RUNTIME_CONFIG, ...parsed };
-  if (merged.captcha_mode !== "math" && merged.captcha_mode !== "slider") {
-    merged.captcha_mode = "math";
+function coerceFiniteNumber(v: unknown, fallback: number): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "") {
+    const n = Number(v);
+    if (Number.isFinite(n)) return n;
   }
+  return fallback;
+}
+
+function coerceCaptchaMode(v: unknown): CaptchaMode {
+  if (v === "math" || v === "slider") return v;
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "math" || s === "slider") return s;
+  }
+  return "math";
+}
+
+function normalizeRuntimeConfig(
+  parsed: Partial<CaptchaRuntimeFileConfig> & {
+    captchaMode?: unknown;
+    mode?: unknown;
+  },
+): CaptchaRuntimeFileConfig {
+  const modeSource = parsed.captcha_mode ?? parsed.captchaMode ?? parsed.mode;
+  const merged: CaptchaRuntimeFileConfig = {
+    ...DEFAULT_RUNTIME_CONFIG,
+    ...parsed,
+    enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : DEFAULT_RUNTIME_CONFIG.enabled,
+    login_captcha:
+      typeof parsed.login_captcha === "boolean" ? parsed.login_captcha : DEFAULT_RUNTIME_CONFIG.login_captcha,
+    order_captcha:
+      typeof parsed.order_captcha === "boolean" ? parsed.order_captcha : DEFAULT_RUNTIME_CONFIG.order_captcha,
+    random_trigger_rate: coerceFiniteNumber(
+      parsed.random_trigger_rate,
+      DEFAULT_RUNTIME_CONFIG.random_trigger_rate,
+    ),
+    cooldown_minutes: Math.round(
+      coerceFiniteNumber(parsed.cooldown_minutes, DEFAULT_RUNTIME_CONFIG.cooldown_minutes),
+    ),
+    captcha_mode: coerceCaptchaMode(modeSource),
+  };
+  merged.random_trigger_rate = Math.min(1, Math.max(0, merged.random_trigger_rate));
+  merged.cooldown_minutes = Math.min(120, Math.max(1, merged.cooldown_minutes));
   return merged;
 }
 

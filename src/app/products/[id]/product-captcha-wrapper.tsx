@@ -20,7 +20,7 @@ export function ProductCaptchaWrapper({
 
   return (
     <CaptchaGate
-      key={`${config.enabled}-${config.randomTriggerRate}-${config.cooldownMinutes}`}
+      key={`${config.enabled}-${config.mode}-${config.randomTriggerRate}-${config.cooldownMinutes}`}
       enabled={config.enabled}
       probability={config.randomTriggerRate}
       cooldownMinutes={config.cooldownMinutes}

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const c = await readCaptchaRuntimeConfig();
-    return NextResponse.json({
+    const res = NextResponse.json({
       enabled: c.enabled,
       loginCaptcha: c.login_captcha,
       orderCaptcha: c.order_captcha,
@@ -15,6 +15,8 @@ export async function GET() {
       cooldownMinutes: c.cooldown_minutes,
       mode: c.captcha_mode,
     });
+    res.headers.set("Cache-Control", "private, no-store, max-age=0, must-revalidate");
+    return res;
   } catch (err) {
     console.error("[captcha/public-config]", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

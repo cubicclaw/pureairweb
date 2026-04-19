@@ -18,14 +18,32 @@ export function useCaptchaRuntimeConfig() {
     setLoading(true);
     setFetchError(null);
     try {
-      const res = await fetch(`${BASE_PATH}/api/captcha/public-config`, { cache: "no-store" });
+      const url = `${BASE_PATH}/api/captcha/public-config?_=${Date.now()}`;
+      const res = await fetch(url, { cache: "no-store" });
       if (!res.ok) throw new Error(`http_${res.status}`);
-      const data = (await res.json()) as CaptchaRuntimePublicConfig;
-      if (typeof data.randomTriggerRate !== "number") throw new Error("invalid_shape");
-      if (data.mode !== "math" && data.mode !== "slider") {
-        data.mode = "math";
+      const raw = (await res.json()) as Record<string, unknown>;
+      const rate = Number(raw.randomTriggerRate);
+      const cooldown = Number(raw.cooldownMinutes);
+      if (!Number.isFinite(rate) || !Number.isFinite(cooldown)) {
+        throw new Error("invalid_shape");
       }
-      setConfig(data);
+      let mode: CaptchaRuntimePublicConfig["mode"] = "math";
+      if (raw.mode === "slider" || raw.mode === "math") {
+        mode = raw.mode;
+      } else if (typeof raw.mode === "string") {
+        const m = raw.mode.trim().toLowerCase();
+        if (m === "slider" || m === "math") mode = m;
+      }
+      const fb = CAPTCHA_PUBLIC_FALLBACK;
+      const normalized: CaptchaRuntimePublicConfig = {
+        enabled: typeof raw.enabled === "boolean" ? raw.enabled : fb.enabled,
+        loginCaptcha: typeof raw.loginCaptcha === "boolean" ? raw.loginCaptcha : fb.loginCaptcha,
+        orderCaptcha: typeof raw.orderCaptcha === "boolean" ? raw.orderCaptcha : fb.orderCaptcha,
+        randomTriggerRate: Math.min(1, Math.max(0, rate)),
+        cooldownMinutes: Math.min(120, Math.max(1, Math.round(cooldown))),
+        mode,
+      };
+      setConfig(normalized);
     } catch {
       setConfig(CAPTCHA_PUBLIC_FALLBACK);
       setFetchError("fallback");
