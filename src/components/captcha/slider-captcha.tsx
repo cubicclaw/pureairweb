@@ -1,6 +1,9 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useCallback, useRef } from "react";
+
+import { BASE_PATH } from "@/lib/base-path";
 
 // @ts-ignore - slider-captcha-js/react has no type declarations
 const SliderCaptchaComponent = dynamic(() => import("slider-captcha-js/react"), {
@@ -12,36 +15,70 @@ const SliderCaptchaComponent = dynamic(() => import("slider-captcha-js/react"), 
   ),
 });
 
+/** 与 `slider-captcha-js` request() 默认底图尺寸及 `POST /api/captcha/slider/issue` 输出一致 */
+const SLIDER_W = 320;
+const SLIDER_H = 160;
+
 interface SliderCaptchaProps {
   onVerified: () => void;
   onError?: (error: unknown) => void;
-  width?: number;
-  height?: number;
   theme?: "light" | "dark";
 }
 
 /**
- * 不傳 `request` / `onVerify`：庫在瀏覽器用底圖 + Canvas 挖空，並用 `dx` 與 `targetX`
- * 做本地容差比對；只有對齊才會觸發 `onSuccess`。
- *
- * 注意：若只傳 `onVerify` 而不傳 `request`，該庫會在 `onVerify` resolve 後直接視為通過，
- * **不再**做本地位置校驗，導致滑錯也能過（若後端啟發式又過寬）。
+ * 服务端出题：`request` 拉取 SVG 底图/拼块 + HMAC token；`onVerify` 将 `x`/`trail` 等 POST 到
+ * `/api/captcha/verify` 比对签名中的 `snapDx`（容差与库默认一致）。
  */
-export function SliderCaptcha({
-  onVerified,
-  onError,
-  width = 320,
-  height = 200,
-  theme = "light",
-}: SliderCaptchaProps) {
+export function SliderCaptcha({ onVerified, onError, theme = "light" }: SliderCaptchaProps) {
+  const tokenRef = useRef<string | null>(null);
+
+  const request = useCallback(async () => {
+    const res = await fetch(`${BASE_PATH}/api/captcha/slider/issue`, { method: "POST" });
+    const data = (await res.json()) as {
+      bgUrl?: string;
+      puzzleUrl?: string;
+      token?: string;
+      error?: string;
+    };
+    if (!res.ok || !data.bgUrl || !data.puzzleUrl || !data.token) {
+      throw new Error(data.error || "無法載入滑塊驗證");
+    }
+    tokenRef.current = data.token;
+    return { bgUrl: data.bgUrl, puzzleUrl: data.puzzleUrl };
+  }, []);
+
+  const onVerify = useCallback(
+    async (payload: { x: number; duration: number; trail: [number, number][]; targetType?: string }) => {
+      const res = await fetch(`${BASE_PATH}/api/captcha/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          captchaType: "slider",
+          token: tokenRef.current,
+          x: payload.x,
+          duration: payload.duration,
+          trail: payload.trail,
+          targetType: payload.targetType,
+        }),
+      });
+      const result = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !result.success) {
+        throw new Error(result.error || "驗證失敗");
+      }
+    },
+    [],
+  );
+
   return (
     <div className="w-full max-w-sm">
       <SliderCaptchaComponent
         // @ts-ignore
         root={null}
-        width={width}
-        height={height}
+        width={SLIDER_W}
+        height={SLIDER_H}
         theme={theme}
+        request={request}
+        onVerify={onVerify}
         onSuccess={onVerified}
         onFail={onError}
       />

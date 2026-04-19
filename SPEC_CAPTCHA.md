@@ -25,7 +25,7 @@
 ### 后端校验（实现说明）
 
 - **数学**：题目与正确答案由 `POST /api/captcha/math/issue` 生成；答案封装在短期 HMAC 签名 token 中（`CAPTCHA_HMAC_SECRET`）。客户端仅展示 `question`，提交时 `POST /api/captcha/verify`（`captchaType: math`）由服务端校验签名与答案。绕过需伪造签名或窃取 secret。
-- **滑块**：**不传 `request` / `onVerify`**，由 `slider-captcha-js` 在浏览器用单张底图 + Canvas 挖空，并用内置容差比对滑条位移与 `targetX`；**只有对齐才 `onSuccess`**。若只传 `onVerify` 而不传 `request`，该库会跳过本地位置校验、仅依赖 `onVerify` 是否抛错，易与宽松后端组合成「滑错也过」——因此当前实现不做滑块 `POST /api/captcha/verify`。若需服务端强校验缺口坐标，需自研或换支持「服务端存 targetX + 校验」的方案。
+- **滑块**：**服务端出题**。`POST /api/captcha/slider/issue` 随机缺口位置，生成底图/拼块 SVG（`data:` URL），并用 `CAPTCHA_HMAC_SECRET` 签发短期 token（载荷含 `snapDx`，与库传入 `onVerify` 的滑条位移 `x` 一致）。前端使用 `slider-captcha-js` 的 `request` + `onVerify`：`request` 取图；`onVerify` 将 `x`/`duration`/`trail` POST 到 `/api/captcha/verify`，服务端验签后比对 `|x - snapDx| ≤ tol`，并叠加轨迹/时长启发式。**禁止**只传 `onVerify` 不传 `request`（库会跳过本地对准且易误配宽松后端）。
 
 ---
 
@@ -116,7 +116,8 @@ POST /api/admin/captcha?token=xxx
 ```
 src/
   lib/
-    captcha-challenge.ts   # 数学 HMAC token；滑块启发式校验
+    captcha-challenge.ts   # 数学 / 滑块 HMAC token 与校验
+    slider-challenge-svg.ts # 滑块服务端 SVG 底图与拼块
   components/
     captcha/
       math-captcha.tsx      # 数学验证码组件（随机加减乘除）
@@ -135,6 +136,7 @@ src/
     api/
       captcha/
         math/issue/route.ts       # 数学题签发（question + token）
+        slider/issue/route.ts     # 滑块签发（bgUrl + puzzleUrl + token）
         verify/route.ts           # 统一验证 API（math / slider）
       admin/
         captcha/route.ts     # Admin 配置 API

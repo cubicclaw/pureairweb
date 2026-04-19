@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyMathChallengeToken, verifySliderHeuristicPayload } from "@/lib/captcha-challenge";
+import {
+  verifyMathChallengeToken,
+  verifySliderChallengeToken,
+  verifySliderHeuristicPayload,
+} from "@/lib/captcha-challenge";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +15,7 @@ interface MathVerifyBody {
 
 interface SliderVerifyBody {
   captchaType: "slider";
+  token: string;
   x: number;
   duration: number;
   trail: [number, number][];
@@ -54,11 +59,28 @@ export async function POST(request: NextRequest) {
 
     if (body.captchaType === "slider") {
       const slider = body as Partial<SliderVerifyBody>;
-      const check = verifySliderHeuristicPayload({
-        x: slider.x,
-        duration: slider.duration,
-        trail: slider.trail,
-      });
+      if (typeof slider.token !== "string" || !slider.token.trim()) {
+        return NextResponse.json(
+          { success: false, error: "token is required for slider captcha" },
+          { status: 400 },
+        );
+      }
+      const xNum = Number(slider.x);
+      if (Number.isNaN(xNum)) {
+        return NextResponse.json({ success: false, error: "invalid_x" }, { status: 400 });
+      }
+      const pos = verifySliderChallengeToken(slider.token, xNum);
+      if (!pos.ok) {
+        return NextResponse.json({ success: false, error: pos.error }, { status: 400 });
+      }
+      const check = verifySliderHeuristicPayload(
+        {
+          x: xNum,
+          duration: slider.duration,
+          trail: slider.trail,
+        },
+        { maxX: pos.maxDx },
+      );
       if (!check.ok) {
         return NextResponse.json({ success: false, error: check.error }, { status: 400 });
       }
