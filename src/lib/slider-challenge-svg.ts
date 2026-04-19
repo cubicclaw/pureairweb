@@ -51,4 +51,8 @@ export function svgToDataUrl(svg: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg, "utf8").toString("base64")}`;
 }
 
-export const SLIDER_STAGE = { w: STAGE_W, h: STAGE_H, piece: PIECE, thumb: 44, tolerance: 6 } as const;
+/**
+ * tolerance：服务端允许的 |x - snapDx| 最大偏差（像素），非「必须完全相等」。
+ * 库内拇指非 44px、亚像素取整等会带来几 px 误差，默认略放宽；与库 canvas 模式默认 6 接近但略大。
+ */
+export const SLIDER_STAGE = { w: STAGE_W, h: STAGE_H, piece: PIECE, thumb: 44, tolerance: 12 } as const;

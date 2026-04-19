@@ -69,13 +69,14 @@ export async function POST(request: NextRequest) {
       if (Number.isNaN(xNum)) {
         return NextResponse.json({ success: false, error: "invalid_x" }, { status: 400 });
       }
-      const pos = verifySliderChallengeToken(slider.token, xNum);
+      const xRounded = Math.round(xNum);
+      const pos = verifySliderChallengeToken(slider.token, xRounded);
       if (!pos.ok) {
         return NextResponse.json({ success: false, error: pos.error }, { status: 400 });
       }
       const check = verifySliderHeuristicPayload(
         {
-          x: xNum,
+          x: xRounded,
           duration: slider.duration,
           trail: slider.trail,
         },

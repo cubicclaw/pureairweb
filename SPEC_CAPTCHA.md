@@ -25,7 +25,7 @@
 ### 后端校验（实现说明）
 
 - **数学**：题目与正确答案由 `POST /api/captcha/math/issue` 生成；答案封装在短期 HMAC 签名 token 中（`CAPTCHA_HMAC_SECRET`）。客户端仅展示 `question`，提交时 `POST /api/captcha/verify`（`captchaType: math`）由服务端校验签名与答案。绕过需伪造签名或窃取 secret。
-- **滑块**：**服务端出题**。`POST /api/captcha/slider/issue` 随机缺口位置，生成底图/拼块 SVG（`data:` URL），并用 `CAPTCHA_HMAC_SECRET` 签发短期 token（载荷含 `snapDx`，与库传入 `onVerify` 的滑条位移 `x` 一致）。前端使用 `slider-captcha-js` 的 `request` + `onVerify`：`request` 取图；`onVerify` 将 `x`/`duration`/`trail` POST 到 `/api/captcha/verify`，服务端验签后比对 `|x - snapDx| ≤ tol`，并叠加轨迹/时长启发式。**禁止**只传 `onVerify` 不传 `request`（库会跳过本地对准且易误配宽松后端）。
+- **滑块**：**服务端出题**。`POST /api/captcha/slider/issue` 随机缺口位置，生成底图/拼块 SVG（`data:` URL），并用 `CAPTCHA_HMAC_SECRET` 签发短期 token（载荷含 `snapDx`，与库传入 `onVerify` 的滑条位移 `x` 一致）。前端使用 `slider-captcha-js` 的 `request` + `onVerify`：`request` 取图；`onVerify` 将 `x`/`duration`/`trail` POST 到 `/api/captcha/verify`，服务端验签后比对 **`|round(x) - snapDx| ≤ tol`**（非像素级完全相等；`tol` 默认 12px，抵消拇指宽度/亚像素误差），并叠加轨迹/时长启发式。**禁止**只传 `onVerify` 不传 `request`（库会跳过本地对准且易误配宽松后端）。
 
 ---
 

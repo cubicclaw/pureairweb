@@ -185,10 +185,11 @@ export function verifySliderChallengeToken(
   }
 
   const maxDx = Math.max(0, payload.w - payload.thumb);
-  if (submittedX < 0 || submittedX > maxDx) {
+  const x = Math.round(Number(submittedX));
+  if (x < 0 || x > maxDx) {
     return { ok: false, error: "x_out_of_range" };
   }
-  if (Math.abs(submittedX - payload.snapDx) > payload.tol) {
+  if (Math.abs(x - Math.round(payload.snapDx)) > payload.tol) {
     return { ok: false, error: "wrong_position" };
   }
 
