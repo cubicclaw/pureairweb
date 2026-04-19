@@ -23,6 +23,14 @@ export function getSupabaseAdminClient(): SupabaseClient {
       autoRefreshToken: false,
       persistSession: false,
     },
+    // Next.js 会扩展全局 fetch 并可能缓存外呼；Admin/验证码 等需始终读最新数据。
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) =>
+        fetch(input, {
+          ...init,
+          cache: "no-store",
+        }),
+    },
   });
 
   return cachedClient;

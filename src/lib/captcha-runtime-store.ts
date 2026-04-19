@@ -1,4 +1,6 @@
 import { readFile, writeFile } from "fs/promises";
+import { unstable_noStore } from "next/cache";
+
 import { getSupabaseAdminClient } from "@/lib/supabase-admin";
 
 export const CAPTCHA_RUNTIME_CONFIG_PATH = "/tmp/captcha-config.json";
@@ -99,6 +101,8 @@ async function writeToSupabase(config: CaptchaRuntimeFileConfig): Promise<boolea
 }
 
 export async function readCaptchaRuntimeConfig(): Promise<CaptchaRuntimeFileConfig> {
+  unstable_noStore();
+
   if (hasSupabaseForCaptcha()) {
     for (let attempt = 0; attempt < 3; attempt++) {
       const r = await readFromSupabaseOnce();
