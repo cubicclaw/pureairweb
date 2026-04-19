@@ -17,6 +17,11 @@
 
 **接入方式**：通过 npm 安装，无外部 API 依赖，完全自托管。
 
+### 运行时配置存哪（重要）
+
+- **本地 / 单实例**：Admin 写入 `/tmp/captcha-config.json` 即可；`GET /api/captcha/public-config` 与 Admin 读同一文件。
+- **Vercel / 多实例**：`/tmp` **不共享**，你在 Admin 改成滑块，前端请求可能打到别的实例，仍读到默认 **数学**。若已配置 **`NEXT_PUBLIC_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`**，请先在 Supabase SQL Editor 执行仓库内 **`supabase/captcha-runtime-config.sql`** 建表；之后配置会读写表 **`captcha_runtime_config`**（`id=1` 的 `config` JSON），全实例一致。
+
 ### 后端校验（实现说明）
 
 - **数学**：题目与正确答案由 `POST /api/captcha/math/issue` 生成；答案封装在短期 HMAC 签名 token 中（`CAPTCHA_HMAC_SECRET`）。客户端仅展示 `question`，提交时 `POST /api/captcha/verify`（`captchaType: math`）由服务端校验签名与答案。绕过需伪造签名或窃取 secret。

@@ -22,6 +22,9 @@ export function useCaptchaRuntimeConfig() {
       if (!res.ok) throw new Error(`http_${res.status}`);
       const data = (await res.json()) as CaptchaRuntimePublicConfig;
       if (typeof data.randomTriggerRate !== "number") throw new Error("invalid_shape");
+      if (data.mode !== "math" && data.mode !== "slider") {
+        data.mode = "math";
+      }
       setConfig(data);
     } catch {
       setConfig(CAPTCHA_PUBLIC_FALLBACK);
