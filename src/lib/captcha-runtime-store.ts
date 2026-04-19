@@ -33,8 +33,21 @@ function hasSupabaseForCaptcha(): boolean {
   );
 }
 
-async function readFromSupabase(): Promise<CaptchaRuntimeFileConfig | null> {
-  if (!hasSupabaseForCaptcha()) return null;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+type SupabaseReadResult =
+  | { kind: "ok"; config: CaptchaRuntimeFileConfig }
+  | { kind: "empty" }
+  | { kind: "error"; message: string };
+
+/**
+ * 单次读取；区分「无行/无 config」与「网络或 PostgREST 错误」。
+ * 无行时返回 empty，不应回退到 /tmp（否则多实例会与 DB 随机打架）。
+ * 仅在 `hasSupabaseForCaptcha()` 为 true 时调用。
+ */
+async function readFromSupabaseOnce(): Promise<SupabaseReadResult> {
   try {
     const supabase = getSupabaseAdminClient();
     const { data, error } = await supabase
@@ -44,16 +57,21 @@ async function readFromSupabase(): Promise<CaptchaRuntimeFileConfig | null> {
       .maybeSingle();
 
     if (error) {
-      console.warn("[captcha-runtime-store] Supabase read:", error.message);
-      return null;
+      return { kind: "error", message: error.message };
     }
-    if (!data?.config || typeof data.config !== "object") {
-      return null;
+    if (!data) {
+      return { kind: "empty" };
     }
-    return normalizeRuntimeConfig(data.config as Partial<CaptchaRuntimeFileConfig>);
+    if (!data.config || typeof data.config !== "object") {
+      return { kind: "empty" };
+    }
+    return {
+      kind: "ok",
+      config: normalizeRuntimeConfig(data.config as Partial<CaptchaRuntimeFileConfig>),
+    };
   } catch (e) {
-    console.warn("[captcha-runtime-store] Supabase read failed:", e);
-    return null;
+    const message = e instanceof Error ? e.message : String(e);
+    return { kind: "error", message };
   }
 }
 
@@ -81,9 +99,20 @@ async function writeToSupabase(config: CaptchaRuntimeFileConfig): Promise<boolea
 }
 
 export async function readCaptchaRuntimeConfig(): Promise<CaptchaRuntimeFileConfig> {
-  const fromDb = await readFromSupabase();
-  if (fromDb) {
-    return fromDb;
+  if (hasSupabaseForCaptcha()) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const r = await readFromSupabaseOnce();
+      if (r.kind === "ok") return r.config;
+      if (r.kind === "empty") {
+        return { ...DEFAULT_RUNTIME_CONFIG };
+      }
+      console.warn(`[captcha-runtime-store] Supabase read error (attempt ${attempt + 1}/3):`, r.message);
+      if (attempt < 2) await sleep(100 * (attempt + 1));
+    }
+    console.error(
+      "[captcha-runtime-store] Supabase read failed after retries; using default config (not falling back to /tmp — avoids per-instance random mode on Vercel).",
+    );
+    return { ...DEFAULT_RUNTIME_CONFIG };
   }
 
   try {
